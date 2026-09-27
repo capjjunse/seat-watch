@@ -2,7 +2,7 @@ name: bus-watch
 
 on:
   schedule:
-    - cron: "*/10 * * * *"  # 10분마다 (비공개 저장소 무료 한도 고려, 실제로는 몇 분 밀릴 수 있음)
+    - cron: "*/5 * * * *"   # 5분마다 (GitHub 최소 간격, 실제로는 몇 분 밀릴 수 있음)
   workflow_dispatch:         # Actions 탭에서 수동 실행
 
 concurrency:
