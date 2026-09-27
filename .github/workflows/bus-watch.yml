@@ -29,11 +29,6 @@ jobs:
         run: python bus_watch.py
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-      - name: JR 유후인노모리 3호 (10/3 하카타 10:11)
-        if: always()
-        run: python jr_watch.py
-        env:
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       - uses: actions/cache/save@v4
         if: always()
         with:
