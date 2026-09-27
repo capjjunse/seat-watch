@@ -1,18 +1,33 @@
 name: bus-watch
 
+# 한 번 실행이 약 5시간 동안 3분마다 확인하고, 끝나면 다음 실행을 스스로 시작한다.
+# (GitHub 예약 실행은 무료 계정에서 몇 시간씩 밀려서, 체인이 끊겼을 때 되살리는 용도로만 사용)
 on:
   schedule:
-    - cron: "*/5 * * * *"   # 5분마다 (GitHub 최소 간격, 실제로는 몇 분 밀릴 수 있음)
-  workflow_dispatch:         # Actions 탭에서 수동 실행
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      run_sec:
+        description: "이번 실행 길이(초). 테스트용, 비우면 5시간"
+        required: false
 
 concurrency:
   group: bus-watch
-  cancel-in-progress: false
+  cancel-in-progress: false   # 실행 중인 것은 그대로 두고 다음 실행은 대기
+
+permissions:
+  contents: read
+  actions: write              # 다음 실행 시작(workflow_dispatch)용
+
+env:
+  END_AT: "2026-10-04T11:00:00+09:00"   # 이 시각 이후 감시 종료
+  INTERVAL_SEC: "180"
+  RUN_SEC: ${{ inputs.run_sec || '18000' }}   # 한 실행당 5시간
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 320
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,12 +40,37 @@ jobs:
           path: state
           key: bus-state-${{ github.run_id }}
           restore-keys: bus-state-
-      - name: 고속버스 (10/4 유후인→후쿠오카공항 10:30, 11:00)
-        run: python bus_watch.py
+      - name: 고속버스 3분 간격 감시 (10/4 유후인→후쿠오카공항 10:30, 11:00)
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          end=$(date -d "$END_AT" +%s)
+          stop=$(( $(date +%s) + RUN_SEC ))
+          fails=0
+          while [ "$(date +%s)" -lt "$stop" ] && [ "$(date +%s)" -lt "$end" ]; do
+            if python bus_watch.py; then
+              fails=0
+            else
+              fails=$((fails + 1))
+              # 연속 5번(약 15분) 실패하면 한 번만 휴대폰으로 경고
+              if [ "$fails" -eq 5 ]; then
+                curl -s -H "Content-Type: application/json" -d "{\"topic\":\"$NTFY_TOPIC\",\"title\":\"⚠️ 버스 감시 오류\",\"message\":\"highwaybus.com 조회가 15분째 실패 중이에요. GitHub Actions 로그를 확인하세요.\",\"priority\":3}" https://ntfy.sh/ > /dev/null || true
+              fi
+            fi
+            sleep "$INTERVAL_SEC"
+          done
       - uses: actions/cache/save@v4
         if: always()
         with:
           path: state
           key: bus-state-${{ github.run_id }}
+      - name: 다음 실행 시작
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(date +%s)" -lt "$(date -d "$END_AT" +%s)" ]; then
+            gh workflow run bus-watch.yml --repo "$GITHUB_REPOSITORY" --ref main
+          else
+            echo "감시 기간 종료"
+          fi
