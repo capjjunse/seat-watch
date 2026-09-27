@@ -25,7 +25,13 @@ jobs:
           path: state
           key: bus-state-${{ github.run_id }}
           restore-keys: bus-state-
-      - run: python bus_watch.py
+      - name: 고속버스 (10/4 유후인→후쿠오카공항 10:30, 11:00)
+        run: python bus_watch.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      - name: JR 유후인노모리 3호 (10/3 하카타 10:11)
+        if: always()
+        run: python jr_watch.py
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       - uses: actions/cache/save@v4
