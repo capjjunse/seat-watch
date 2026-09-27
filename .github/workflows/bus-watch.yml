@@ -1,0 +1,35 @@
+name: bus-watch
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # 10분마다 (비공개 저장소 무료 한도 고려, 실제로는 몇 분 밀릴 수 있음)
+  workflow_dispatch:         # Actions 탭에서 수동 실행
+
+concurrency:
+  group: bus-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests beautifulsoup4
+      # 재알림 간격(30분) 계산용 상태를 실행 간에 유지
+      - uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: bus-state-${{ github.run_id }}
+          restore-keys: bus-state-
+      - run: python bus_watch.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: state
+          key: bus-state-${{ github.run_id }}
